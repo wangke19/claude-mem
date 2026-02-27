@@ -58,8 +58,10 @@ async function buildHooks() {
       private: true,
       description: 'Runtime dependencies for claude-mem bundled hooks',
       type: 'module',
+      optionalDependencies: {
+        'keytar': '^7.9.0'
+      },
       dependencies: {
-        'keytar': '^7.9.0',
         'tree-sitter-cli': '^0.26.5',
         'tree-sitter-c': '^0.24.1',
         'tree-sitter-cpp': '^0.23.4',
