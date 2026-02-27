@@ -59,6 +59,7 @@ async function buildHooks() {
       description: 'Runtime dependencies for claude-mem bundled hooks',
       type: 'module',
       dependencies: {
+        'keytar': '^7.9.0',
         'tree-sitter-cli': '^0.26.5',
         'tree-sitter-c': '^0.24.1',
         'tree-sitter-cpp': '^0.23.4',
@@ -105,6 +106,7 @@ async function buildHooks() {
       logLevel: 'error', // Suppress warnings (import.meta warning is benign)
       external: [
         'bun:sqlite',
+        'keytar', // Native module for credential storage
         // Optional chromadb embedding providers
         'cohere-ai',
         'ollama',
@@ -138,6 +140,7 @@ async function buildHooks() {
       logLevel: 'error',
       external: [
         'bun:sqlite',
+        'keytar', // Native module for credential storage
         'tree-sitter-cli',
         'tree-sitter-javascript',
         'tree-sitter-typescript',
@@ -173,7 +176,7 @@ async function buildHooks() {
       outfile: `${hooksDir}/${CONTEXT_GENERATOR.name}.cjs`,
       minify: true,
       logLevel: 'error',
-      external: ['bun:sqlite'],
+      external: ['bun:sqlite', 'keytar'],
       define: {
         '__DEFAULT_PACKAGE_VERSION__': `"${version}"`
       }

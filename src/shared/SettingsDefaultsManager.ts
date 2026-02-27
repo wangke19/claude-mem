@@ -5,10 +5,11 @@
  * Provides methods to get defaults with optional environment variable overrides.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { DEFAULT_OBSERVATION_TYPES_STRING, DEFAULT_OBSERVATION_CONCEPTS_STRING } from '../constants/observation-metadata.js';
+import { CredentialManager } from './CredentialManager.js';
 // NOTE: Do NOT import logger here - it creates a circular dependency
 // logger.ts depends on SettingsDefaultsManager for its initialization
 
@@ -186,6 +187,8 @@ export class SettingsDefaultsManager {
    *   1. Environment variables (highest priority)
    *   2. Settings file (~/.claude-mem/settings.json)
    *   3. Default values (lowest priority)
+   *
+   * SECURITY: API keys are loaded from secure credential storage (OS keychain/encrypted file)
    */
   static loadFromFile(settingsPath: string): SettingsDefaults {
     try {
@@ -234,11 +237,95 @@ export class SettingsDefaultsManager {
       }
 
       // Apply environment variable overrides (highest priority)
-      return this.applyEnvOverrides(result);
+      const finalSettings = this.applyEnvOverrides(result);
+
+      // SECURITY: Set restrictive file permissions (owner read/write only)
+      try {
+        chmodSync(settingsPath, 0o600);
+      } catch (error) {
+        console.warn('[SETTINGS] Failed to set restrictive file permissions:', error);
+      }
+
+      return finalSettings;
     } catch (error) {
       console.warn('[SETTINGS] Failed to load settings, using defaults:', settingsPath, error);
       // Still apply env var overrides even on error
       return this.applyEnvOverrides(this.getAllDefaults());
+    }
+  }
+
+  /**
+   * Load settings from file with secure credential integration
+   * This is async version that loads API keys from secure storage
+   *
+   * SECURITY: Automatically migrates plaintext API keys to secure storage
+   */
+  static async loadFromFileSecure(settingsPath: string): Promise<SettingsDefaults> {
+    // First, load settings normally
+    const settings = this.loadFromFile(settingsPath);
+
+    // Migrate plaintext credentials to secure storage if needed
+    try {
+      await CredentialManager.migrateFromPlaintext(settings as any);
+    } catch (error) {
+      console.warn('[SETTINGS] Failed to migrate credentials to secure storage:', error);
+    }
+
+    // Load credentials from secure storage
+    try {
+      await CredentialManager.loadIntoSettings(settings as any);
+    } catch (error) {
+      console.warn('[SETTINGS] Failed to load credentials from secure storage:', error);
+    }
+
+    // Write back settings with migration markers
+    try {
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+      chmodSync(settingsPath, 0o600);
+    } catch (error) {
+      console.warn('[SETTINGS] Failed to update settings file after credential migration:', error);
+    }
+
+    return settings;
+  }
+
+  /**
+   * Save settings to file (without exposing credentials)
+   * SECURITY: API keys are saved to secure storage, not plaintext file
+   */
+  static async saveToFileSecure(settingsPath: string, settings: SettingsDefaults): Promise<void> {
+    try {
+      // Extract and save secure credentials separately
+      const settingsToSave = { ...settings };
+
+      for (const key of CredentialManager.getSecureCredentialKeys()) {
+        const value = settingsToSave[key as keyof SettingsDefaults];
+        if (value && typeof value === 'string' && value.length > 0) {
+          // Save to secure storage
+          if (!value.startsWith('keytar:') && !value.startsWith('encrypted:')) {
+            await CredentialManager.setCredential(key, value);
+            // Replace with migration marker in file
+            (settingsToSave as any)[key] = `keytar:${key}`;
+          }
+        }
+      }
+
+      // Ensure directory exists
+      const dir = dirname(settingsPath);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+
+      // Write settings file without plaintext credentials
+      writeFileSync(settingsPath, JSON.stringify(settingsToSave, null, 2), 'utf-8');
+
+      // Set restrictive permissions
+      chmodSync(settingsPath, 0o600);
+
+      console.log('[SETTINGS] Settings saved securely to:', settingsPath);
+    } catch (error) {
+      console.error('[SETTINGS] Failed to save settings:', error);
+      throw error;
     }
   }
 }
