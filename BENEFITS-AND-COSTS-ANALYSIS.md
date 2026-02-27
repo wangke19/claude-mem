@@ -324,6 +324,12 @@ With claude-mem:
 - Use CLI authentication (billed to Claude subscription)
 - Disable AI processing (store raw observations only)
 
+**Vertex AI Users:**
+- Worker background processing is **separate** from your Vertex AI session
+- Recommended: Use free Gemini provider (zero cost)
+- Your Vertex AI quota is only used for context injection (normal conversation)
+- See "Vertex AI & Enterprise Compatibility" section for details
+
 **Verdict:** ✅ Negligible cost
 
 ---
@@ -520,6 +526,100 @@ Savings: 24+ min (96% faster)
 
 ---
 
+## 🔌 Vertex AI & Enterprise Compatibility
+
+### Claude Code via Vertex AI ⚠️
+
+**Question:** "I use Claude Code via Vertex AI. Will claude-mem work?"
+
+**Answer:** ✅ **Yes, but requires configuration**
+
+**How It Works:**
+
+Claude-mem uses **two separate AI providers**:
+
+1. **Your Claude Code Session** (Vertex AI)
+   - Main conversation interface
+   - Uses your GCP Vertex AI quota
+   - No changes needed
+
+2. **Worker Background Processing** (Configurable)
+   - Observation compression
+   - Session summaries
+   - Search queries
+   - **Requires separate provider configuration**
+
+**The Issue:**
+
+Vertex AI is **not available** as a worker provider. Available options:
+- ✅ Claude (via CLI subscription or API key)
+- ✅ Gemini (free tier)
+- ✅ OpenRouter (free models available)
+- ❌ Vertex AI (not supported)
+
+**Solution: Use Free Gemini Provider** ✅
+
+```json
+// ~/.claude-mem/settings.json
+{
+  "CLAUDE_MEM_PROVIDER": "gemini",
+  "CLAUDE_MEM_GEMINI_API_KEY": "your-free-api-key"
+}
+```
+
+**Benefits:**
+- ✅ **$0 cost** - 1500 requests/minute free tier
+- ✅ **No Vertex quota impact** - separate provider
+- ✅ **Sufficient quality** - compression doesn't need Opus
+- ✅ **5 minute setup** - get key from Google AI Studio
+
+**Token Consumption Breakdown:**
+
+| Operation | Provider | Who Pays | Annual Cost |
+|-----------|----------|----------|-------------|
+| Your conversations | Vertex AI | Your GCP account | Existing quota |
+| Context injection | Vertex AI | Your GCP account | Existing quota |
+| Background compression | Gemini (free) | $0 | $0 |
+| Session summaries | Gemini (free) | $0 | $0 |
+| Search queries | Gemini (free) | $0 | $0 |
+
+**Total Additional Cost:** **$0** with free Gemini tier
+
+### Alternative: Claude CLI Billing
+
+If you have a Claude Pro/Team subscription:
+
+```json
+{
+  "CLAUDE_MEM_PROVIDER": "claude",
+  "CLAUDE_MEM_CLAUDE_AUTH_METHOD": "cli"
+}
+```
+
+- Billed to your Claude subscription (not Vertex)
+- No additional API keys needed
+- Uses existing subscription quota
+
+### Enterprise Considerations
+
+**Proxy/VPN Environments:**
+- ✅ Worker respects `HTTP_PROXY` and `HTTPS_PROXY`
+- ✅ `ANTHROPIC_BASE_URL` supported for custom endpoints
+- ✅ Localhost-only architecture (no external endpoints)
+
+**Air-Gapped Environments:**
+- ⚠️ Background AI processing requires internet access
+- ⚠️ Can disable AI processing (store raw observations only)
+- ✅ Database and viewer work fully offline
+
+**Security Policies:**
+- ✅ OS credential storage (v10.6.0)
+- ✅ No telemetry or analytics
+- ✅ All data stored locally (`~/.claude-mem/`)
+- ✅ AGPL-3.0 license (source available)
+
+---
+
 ## 🚦 Recommendation Matrix
 
 ### When to Install
@@ -533,6 +633,7 @@ Savings: 24+ min (96% faster)
 | **Quick scripts/one-offs** | ⚠️ Optional | Less benefit for short work |
 | **Resource-constrained systems** | ⚠️ Optional | Can disable Chroma |
 | **Security-sensitive work** | ✅ **Recommend** | v10.6.0 has A- security |
+| **Claude Code via Vertex AI** | ✅ **Recommend** | Use free Gemini provider for background |
 
 ### When to Skip
 
